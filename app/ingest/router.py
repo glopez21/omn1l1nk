@@ -2,11 +2,13 @@ import hashlib
 import json
 import logging
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import settings
 from app.db.session import Pool
 from app.models.schemas import IngestEvent, IngestResponse
+from app.pipeline.agents import ensure_registered, mark_seen
 
 logger = logging.getLogger("omn1l1nk.ingest")
 router = APIRouter(prefix="/api/v1", tags=["ingest"])
@@ -52,6 +54,12 @@ async def ingest_event(event: IngestEvent, request: Request):
         event.raw,
         event.created_at,
     )
+
+    # Register agent + track heartbeat
+    agent_http: httpx.AsyncClient | None = getattr(request.app.state, "agent_http", None)
+    if agent_http:
+        await ensure_registered(agent_http, event.source, event.source_instance)
+        mark_seen(event.source_instance)
 
     depth_row = await Pool.fetchrow("SELECT count(*) AS cnt FROM event_outbox WHERE pushed = FALSE")
     return IngestResponse(

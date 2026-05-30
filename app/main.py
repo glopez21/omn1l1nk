@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,6 +13,7 @@ from app.db.session import Pool
 from app.ingest.router import router as ingest_router
 from app.admin.router import router as admin_router
 from app.pipeline.poller import poll_loop, stop as stop_poller, get_metrics
+from app.pipeline.agents import heartbeat_loop, stop as stop_agents
 from app.models.schemas import HealthResponse
 
 logging.basicConfig(
@@ -26,15 +28,27 @@ async def lifespan(app: FastAPI):
     logger.info("connecting to n3xusdb...")
     await Pool.connect()
     logger.info("starting poll loop...")
-    task = asyncio.create_task(poll_loop())
+    poll_task = asyncio.create_task(poll_loop())
+
+    agent_http = httpx.AsyncClient(timeout=15)
+    app.state.agent_http = agent_http
+    agent_task = asyncio.create_task(heartbeat_loop())
+
     yield
     logger.info("shutting down...")
     stop_poller()
-    task.cancel()
+    stop_agents()
+    poll_task.cancel()
+    agent_task.cancel()
     try:
-        await task
+        await poll_task
     except asyncio.CancelledError:
         pass
+    try:
+        await agent_task
+    except asyncio.CancelledError:
+        pass
+    await agent_http.aclose()
     await Pool.close()
 
 
