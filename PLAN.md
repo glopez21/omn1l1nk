@@ -444,3 +444,20 @@ Phase 4 — Remote Daemon Deployment
 | HTTP client | httpx | Async HTTP for hub delivery |
 | Config | pydantic-settings | Env var validation |
 | Deployment | Docker Compose | Consistent with rest of stack |
+
+---
+
+## Session History: 2026-05-30
+
+### Admin API + UI
+- Created `/api/v1/admin/*` routes — CRUD for API keys, enrich rules, stats, event viewer
+- Built static SPA at `/admin/` with Dashboard, API Keys, Enrich Rules, Queue tabs
+- Enrich rule reload moved inside poller's main loop so admin changes take effect immediately
+
+### Enrichment Rules
+- Added 8 new rules: port_scan, malware_detected, privilege_escalation, data_exfiltration, phishing, firewall_block, dns_tunnel, anomalous_login, multiple_failed_logins
+- `enrich_rules/default.yaml` synced via `scripts/seed_enrich_rules.py --yaml`
+
+### Deployment
+- Comprehensive `docker-compose.yml` with n3xusDB + Omn1L1nk on `n3xus-net`
+- `.env.example` documents all required env vars
