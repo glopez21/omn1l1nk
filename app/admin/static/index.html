@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Omn1L1nk Admin</title>
+<style>
+  :root {
+    --bg: #0f0f12;
+    --surface: #1a1a22;
+    --surface-2: #24242e;
+    --border: #2e2e3a;
+    --text: #e0e0e8;
+    --text-dim: #8888a0;
+    --accent: #6366f1;
+    --accent-dim: #4f46e5;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --rad: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+  h1 span { color: var(--text-dim); font-weight: 400; }
+  .nav { display: flex; gap: 4px; margin-bottom: 24px; }
+  .nav button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 8px 16px;
+    border-radius: var(--rad);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all .15s;
+  }
+  .nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .nav button:hover:not(.active) { background: var(--surface-2); color: var(--text); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--rad);
+    padding: 16px;
+  }
+  .card .label { font-size: 11px; text-transform: uppercase; color: var(--text-dim); letter-spacing: .5px; }
+  .card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .card .value.green { color: var(--green); }
+  .card .value.red { color: var(--red); }
+  .card .value.yellow { color: var(--yellow); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: var(--rad);
+    overflow: hidden;
+    font-size: 13px;
+  }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { background: var(--surface-2); font-size: 11px; text-transform: uppercase; color: var(--text-dim); letter-spacing: .5px; }
+  tr:hover { background: var(--surface-2); }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.green { background: #166534; color: var(--green); }
+  .badge.red { background: #7f1d1d; color: var(--red); }
+  .badge.yellow { background: #713f12; color: var(--yellow); }
+  .badge.slate { background: #1e293b; color: #94a3b8; }
+  button {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: var(--rad);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .15s;
+  }
+  button:hover { background: var(--accent-dim); }
+  button.danger { background: var(--red); }
+  button.danger:hover { background: #dc2626; }
+  button.small { padding: 4px 10px; font-size: 11px; }
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    z-index: 100;
+  }
+  .modal-overlay.open { display: flex; align-items: center; justify-content: center; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--rad);
+    padding: 24px;
+    min-width: 400px;
+    max-width: 600px;
+  }
+  .modal h2 { margin-bottom: 16px; font-size: 16px; }
+  .modal label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .modal input, .modal textarea, .modal select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: var(--rad);
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .modal textarea { min-height: 60px; font-family: monospace; }
+  .modal .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .modal .actions button { padding: 8px 20px; }
+  .key-display {
+    background: var(--bg);
+    border: 1px solid var(--yellow);
+    border-radius: var(--rad);
+    padding: 12px;
+    margin-bottom: 16px;
+    word-break: break-all;
+    font-family: monospace;
+    font-size: 13px;
+  }
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--rad);
+    padding: 12px 20px;
+    font-size: 13px;
+    z-index: 200;
+    display: none;
+    animation: fadeIn .2s;
+  }
+  .toast.show { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<h1>Omn1L1nk <span>Admin</span></h1>
+
+<div class="nav">
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="keys">API Keys</button>
+  <button data-tab="rules">Enrich Rules</button>
+  <button data-tab="queue">Queue</button>
+</div>
+
+<div id="panel-dashboard" class="panel active">
+  <div class="cards" id="stats-cards"></div>
+</div>
+
+<div id="panel-keys" class="panel">
+  <div style="margin-bottom:12px"><button id="add-key-btn">+ New API Key</button></div>
+  <table><thead><tr>
+    <th>Label</th><th>Source</th><th>Instance</th><th>Status</th><th>Created</th><th></th>
+  </tr></thead><tbody id="keys-tbody"></tbody></table>
+</div>
+
+<div id="panel-rules" class="panel">
+  <div style="margin-bottom:12px"><button id="add-rule-btn">+ New Rule</button></div>
+  <table><thead><tr>
+    <th>Priority</th><th>Name</th><th>Match</th><th>Enrich</th><th>Status</th><th></th>
+  </tr></thead><tbody id="rules-tbody"></tbody></table>
+</div>
+
+<div id="panel-queue" class="panel">
+  <table><thead><tr>
+    <th>ID</th><th>Source</th><th>Type</th><th>Severity</th><th>Title</th><th>Pushed</th><th>Attempts</th><th>Error</th>
+  </tr></thead><tbody id="queue-tbody"></tbody></table>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/v1/admin';
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'request failed');
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function modal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+document.getElementById('modal-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// ─── Navigation ──────────────────────────────────────────────
+
+document.querySelectorAll('.nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    loadTab(btn.dataset.tab);
+  });
+});
+
+function loadTab(tab) {
+  if (tab === 'dashboard') loadDashboard();
+  else if (tab === 'keys') loadKeys();
+  else if (tab === 'rules') loadRules();
+  else if (tab === 'queue') loadQueue();
+}
+
+// ─── Dashboard ───────────────────────────────────────────────
+
+async function loadDashboard() {
+  try {
+    const health = await api('/../health');
+    const stats = await api('/stats');
+    document.getElementById('stats-cards').innerHTML = `
+      <div class="card"><div class="label">Status</div><div class="value ${health.status === 'healthy' ? 'green' : 'red'}">${health.status}</div></div>
+      <div class="card"><div class="label">Queue Depth</div><div class="value ${stats.queue_depth > 0 ? 'yellow' : 'green'}">${stats.queue_depth}</div></div>
+      <div class="card"><div class="label">Delivery Rate</div><div class="value">${health.delivery_rate_per_min}/min</div></div>
+      <div class="card"><div class="label">Error Rate</div><div class="value ${health.error_rate_per_min > 0 ? 'red' : 'green'}">${health.error_rate_per_min}/min</div></div>
+      <div class="card"><div class="label">Total Events</div><div class="value">${stats.total_events}</div></div>
+      <div class="card"><div class="label">Failed Events</div><div class="value ${stats.failed.count > 0 ? 'red' : 'green'}">${stats.failed.count}</div></div>
+      <div class="card"><div class="label">Augur</div><div class="value ${health.augur_status === 'reachable' ? 'green' : health.augur_status === 'unknown' ? 'yellow' : 'red'}">${health.augur_status}</div></div>
+      <div class="card"><div class="label">n3xusDB</div><div class="value ${health.n3xusdb_status === 'connected' ? 'green' : 'red'}">${health.n3xusdb_status}</div></div>
+    `;
+  } catch (e) {
+    document.getElementById('stats-cards').innerHTML = `<div class="card"><div class="value red">Error: ${e.message}</div></div>`;
+  }
+}
+
+// ─── API Keys ────────────────────────────────────────────────
+
+async function loadKeys() {
+  try {
+    const keys = await api('/api-keys');
+    document.getElementById('keys-tbody').innerHTML = keys.map(k => `
+      <tr>
+        <td>${esc(k.label)}</td>
+        <td>${esc(k.source)}</td>
+        <td>${esc(k.source_instance)}</td>
+        <td><span class="badge ${k.enabled ? 'green' : 'red'}">${k.enabled ? 'enabled' : 'disabled'}</span></td>
+        <td>${new Date(k.created_at).toLocaleDateString()}</td>
+        <td>
+          <button class="small" onclick="toggleKey('${k.id}', ${!k.enabled})">${k.enabled ? 'Disable' : 'Enable'}</button>
+          <button class="small danger" onclick="deleteKey('${k.id}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    document.getElementById('keys-tbody').innerHTML = `<tr><td colspan="6" style="color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+async function toggleKey(id, enabled) {
+  await api(`/api-keys/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
+  toast(`Key ${enabled ? 'enabled' : 'disabled'}`);
+  loadKeys();
+}
+
+async function deleteKey(id) {
+  if (!confirm('Delete this API key?')) return;
+  await api(`/api-keys/${id}`, { method: 'DELETE' });
+  toast('Key deleted');
+  loadKeys();
+}
+
+document.getElementById('add-key-btn').addEventListener('click', () => {
+  modal(`
+    <h2>Create API Key</h2>
+    <label>Label</label><input id="f-key-label" placeholder="e.g. dev-box-01">
+    <label>Source</label><input id="f-key-source" placeholder="e.g. logsentry">
+    <label>Source Instance</label><input id="f-key-instance" placeholder="e.g. dev-box">
+    <div id="key-result" style="display:none">
+      <label style="color:var(--yellow)">⚠ Save this key — it won't be shown again</label>
+      <div class="key-display" id="key-value"></div>
+    </div>
+    <div class="actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button id="create-key-btn">Create</button>
+    </div>
+  `);
+  document.getElementById('create-key-btn').addEventListener('click', async () => {
+    const label = document.getElementById('f-key-label').value.trim();
+    const source = document.getElementById('f-key-source').value.trim();
+    const instance = document.getElementById('f-key-instance').value.trim();
+    if (!label || !source || !instance) { toast('All fields required'); return; }
+    try {
+      const result = await api('/api-keys', {
+        method: 'POST',
+        body: JSON.stringify({ label, source, source_instance: instance }),
+      });
+      document.getElementById('key-result').style.display = 'block';
+      document.getElementById('key-value').textContent = result.key;
+      document.getElementById('create-key-btn').style.display = 'none';
+      toast('Key created');
+      loadKeys();
+    } catch (e) { toast(e.message); }
+  });
+});
+
+// ─── Enrich Rules ────────────────────────────────────────────
+
+async function loadRules() {
+  try {
+    const rules = await api('/rules');
+    document.getElementById('rules-tbody').innerHTML = rules.map(r => `
+      <tr>
+        <td>${r.priority}</td>
+        <td>${esc(r.name)}</td>
+        <td><code style="font-size:11px;color:var(--text-dim)">${esc(JSON.stringify(r.match))}</code></td>
+        <td><code style="font-size:11px;color:var(--text-dim)">${esc(JSON.stringify(r.enrich))}</code></td>
+        <td><span class="badge ${r.enabled ? 'green' : 'red'}">${r.enabled ? 'enabled' : 'disabled'}</span></td>
+        <td>
+          <button class="small" onclick="editRule('${r.id}')">Edit</button>
+          <button class="small danger" onclick="deleteRule('${r.id}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    document.getElementById('rules-tbody').innerHTML = `<tr><td colspan="6" style="color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+async function deleteRule(id) {
+  if (!confirm('Delete this rule?')) return;
+  await api(`/rules/${id}`, { method: 'DELETE' });
+  toast('Rule deleted');
+  loadRules();
+}
+
+function editRule(id) {
+  // Simple inline approach: fetch rule data, show edit modal
+  fetch(API + '/rules').then(r => r.json()).then(rules => {
+    const rule = rules.find(r => r.id === id);
+    if (!rule) return;
+    modal(`
+      <h2>Edit Rule</h2>
+      <label>Name</label><input id="f-rule-name" value="${esc(rule.name)}">
+      <label>Match (JSON)</label><textarea id="f-rule-match" rows="3">${esc(JSON.stringify(rule.match, null, 2))}</textarea>
+      <label>Enrich (JSON)</label><textarea id="f-rule-enrich" rows="3">${esc(JSON.stringify(rule.enrich, null, 2))}</textarea>
+      <label>Priority</label><input id="f-rule-priority" type="number" value="${rule.priority}">
+      <label>Enabled</label>
+      <select id="f-rule-enabled">
+        <option value="true" ${rule.enabled ? 'selected' : ''}>Yes</option>
+        <option value="false" ${!rule.enabled ? 'selected' : ''}>No</option>
+      </select>
+      <div class="actions">
+        <button onclick="closeModal()">Cancel</button>
+        <button id="save-rule-btn">Save</button>
+      </div>
+    `);
+    document.getElementById('save-rule-btn').addEventListener('click', async () => {
+      try {
+        await api(`/rules/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: document.getElementById('f-rule-name').value.trim(),
+            match: JSON.parse(document.getElementById('f-rule-match').value),
+            enrich: JSON.parse(document.getElementById('f-rule-enrich').value),
+            priority: parseInt(document.getElementById('f-rule-priority').value),
+            enabled: document.getElementById('f-rule-enabled').value === 'true',
+          }),
+        });
+        toast('Rule updated');
+        closeModal();
+        loadRules();
+      } catch (e) { toast(e.message); }
+    });
+  });
+}
+
+document.getElementById('add-rule-btn').addEventListener('click', () => {
+  modal(`
+    <h2>New Enrich Rule</h2>
+    <label>Name</label><input id="f-rule-name" placeholder="e.g. SSH brute force scoring">
+    <label>Match (JSON)</label><textarea id="f-rule-match" rows="3" placeholder='{"source": "logsentry", "event_type": "ssh_bruteforce"}'></textarea>
+    <label>Enrich (JSON)</label><textarea id="f-rule-enrich" rows="3" placeholder='{"severity": "high", "confidence": 0.85, "tags": ["high_fidelity"]}'></textarea>
+    <label>Priority</label><input id="f-rule-priority" type="number" value="100">
+    <div class="actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button id="save-rule-btn">Create</button>
+    </div>
+  `);
+  document.getElementById('save-rule-btn').addEventListener('click', async () => {
+    try {
+      await api('/rules', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: document.getElementById('f-rule-name').value.trim(),
+          match: JSON.parse(document.getElementById('f-rule-match').value),
+          enrich: JSON.parse(document.getElementById('f-rule-enrich').value),
+          priority: parseInt(document.getElementById('f-rule-priority').value) || 100,
+        }),
+      });
+      toast('Rule created');
+      closeModal();
+      loadRules();
+    } catch (e) { toast(e.message); }
+  });
+});
+
+// ─── Queue ───────────────────────────────────────────────────
+
+async function loadQueue() {
+  try {
+    const data = await api('/events?limit=50&offset=0');
+    document.getElementById('queue-tbody').innerHTML = data.items.map(e => `
+      <tr>
+        <td style="font-family:monospace;font-size:11px">${e.id.slice(0, 8)}…</td>
+        <td>${esc(e.source)}</td>
+        <td>${esc(e.event_type)}</td>
+        <td><span class="badge
+          ${e.severity === 'critical' ? 'red' : e.severity === 'high' ? 'yellow' : e.severity === 'medium' ? 'yellow' : 'slate'}
+        ">${e.severity}</span></td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.title)}</td>
+        <td>${e.pushed ? `<span class="badge green">yes</span>` : `<span class="badge red">no</span>`}</td>
+        <td>${e.delivery_attempts}</td>
+        <td style="color:var(--text-dim);font-size:11px">${e.error ? esc(e.error) : ''}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    document.getElementById('queue-tbody').innerHTML = `<tr><td colspan="8" style="color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ─── Init ────────────────────────────────────────────────────
+
+loadDashboard();
+</script>
+</body>
+</html>

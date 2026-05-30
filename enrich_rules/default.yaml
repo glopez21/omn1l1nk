@@ -1,0 +1,171 @@
+rules:
+  - name: "SSH brute force scoring"
+    match:
+      source: "logsentry"
+      event_type: "ssh_bruteforce"
+    enrich:
+      confidence: 0.85
+      tags:
+        - "high_fidelity"
+        - "authentication"
+      context:
+        tlp: "amber"
+
+  - name: "Known bad IPs"
+    match:
+      context.ip: "10.0.0.5"
+    enrich:
+      severity: "critical"
+      confidence: 0.95
+      tags:
+        - "known_attacker"
+
+  - name: "Off-hours event boost"
+    match:
+      source: "alertflow"
+    enrich:
+      tags:
+        - "off_hours_review"
+
+  - name: "Low priority noise reduction"
+    match:
+      event_type: "heartbeat"
+    enrich:
+      tags:
+        - "noise"
+
+  - name: "Critical severity from any source"
+    match:
+      severity: "critical"
+    enrich:
+      confidence: 0.75
+      tags:
+        - "priority_review"
+
+  - name: "Port scan detection escalation"
+    match:
+      source: "logsentry"
+      event_type: "port_scan"
+    enrich:
+      severity: "high"
+      confidence: 0.80
+      tags:
+        - "reconnaissance"
+        - "network_scan"
+      context:
+        tlp: "amber"
+        kill_chain: "reconnaissance"
+
+  - name: "Malware detected — critical escalation"
+    match:
+      event_type: "malware_detected"
+    enrich:
+      severity: "critical"
+      confidence: 0.90
+      tags:
+        - "malware"
+        - "compromise_indicator"
+      context:
+        tlp: "red"
+
+  - name: "Privilege escalation — high priority"
+    match:
+      event_type: "privilege_escalation"
+    enrich:
+      severity: "high"
+      confidence: 0.85
+      tags:
+        - "privilege_escalation"
+        - "lateral_movement"
+      context:
+        tlp: "amber"
+        kill_chain: "privilege_escalation"
+
+  - name: "Data exfiltration — critical"
+    match:
+      event_type: "data_exfiltration"
+    enrich:
+      severity: "critical"
+      confidence: 0.80
+      tags:
+        - "exfiltration"
+        - "data_loss"
+      context:
+        tlp: "red"
+        kill_chain: "exfiltration"
+
+  - name: "Phishing detection — moderate escalation"
+    match:
+      event_type: "phishing"
+    enrich:
+      severity: "high"
+      confidence: 0.75
+      tags:
+        - "phishing"
+        - "social_engineering"
+      context:
+        tlp: "amber"
+
+  - name: "Firewall block triggered"
+    match:
+      source: "logsentry"
+      event_type: "firewall_block"
+    enrich:
+      severity: "medium"
+      confidence: 0.70
+      tags:
+        - "firewall"
+        - "network_block"
+      context:
+        tlp: "green"
+
+  - name: "DNS tunneling suspicion"
+    match:
+      event_type: "dns_tunnel"
+    enrich:
+      severity: "high"
+      confidence: 0.75
+      tags:
+        - "dns_tunnel"
+        - "c2_channel"
+      context:
+        tlp: "amber"
+        kill_chain: "command_and_control"
+
+  - name: "EventFlow user anomaly"
+    match:
+      source: "eventflow"
+      event_type: "anomalous_login"
+    enrich:
+      severity: "high"
+      confidence: 0.70
+      tags:
+        - "user_anomaly"
+        - "authentication"
+      context:
+        tlp: "amber"
+
+  - name: "Multiple failed logins — escalation"
+    match:
+      source: "eventflow"
+      event_type: "multiple_failed_logins"
+    enrich:
+      severity: "high"
+      confidence: 0.80
+      tags:
+        - "brute_force"
+        - "authentication_failure"
+      context:
+        tlp: "amber"
+
+  - name: "AlertFlow triage — analyst intervention"
+    match:
+      source: "alertflow"
+      event_type: "triage"
+    enrich:
+      confidence: 0.65
+      tags:
+        - "triage_result"
+        - "analyst_reviewed"
+      context:
+        tlp: "green"
