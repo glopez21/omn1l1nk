@@ -2,8 +2,9 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
+import aiofiles
 import httpx
 
 from app.config import settings
@@ -37,16 +38,35 @@ def get_metrics() -> dict:
     }
 
 
-async def poll_loop():
+def _load_json(val):
+    if val is None:
+        return {}
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        return json.loads(val)
+    return {}
+
+
+async def _write_dead_letter(event_id, event: dict):
+    try:
+        async with aiofiles.open(settings.dead_letter_path, "a") as f:
+            entry = {"id": event_id, "event": event, "failed_at": datetime.now(timezone.utc).isoformat()}
+            await f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        logger.error("failed to write dead letter: %s", e)
+
+
+async def poll_loop(shared_client: httpx.AsyncClient | None = None):
     _metrics["started_at"] = time.time()
-    client = httpx.AsyncClient(timeout=30)
+    client = shared_client or httpx.AsyncClient(timeout=30)
 
     while _running:
         rules = await load_rules()
         try:
             rows = await Pool.fetch(
                 """SELECT id, source, source_instance, event_type, severity,
-                          title, payload, context, tags, raw, created_at
+                          title, payload, context, tags, raw, created_at, delivery_attempts
                    FROM event_outbox
                    WHERE pushed = FALSE AND delivery_attempts < $1
                    ORDER BY created_at
@@ -62,14 +82,6 @@ async def poll_loop():
 
             for row in rows:
                 event_id = row["id"]
-                def _load_json(val):
-                    if val is None:
-                        return {}
-                    if isinstance(val, dict):
-                        return val
-                    if isinstance(val, str):
-                        return json.loads(val)
-                    return {}
 
                 event = {
                     "source": row["source"],
@@ -106,22 +118,35 @@ async def poll_loop():
                         event_id,
                     )
                     _metrics["delivered"] += 1
-                    _metrics["last_delivery"] = datetime.utcnow()
+                    _metrics["last_delivery"] = datetime.now(timezone.utc)
                 else:
-                    await Pool.execute(
-                        """UPDATE event_outbox
-                           SET delivery_attempts = delivery_attempts + 1, error = $1
-                           WHERE id = $2""",
-                        "delivery_failed",
-                        event_id,
-                    )
+                    attempts = row["delivery_attempts"] + 1
+                    if attempts >= settings.max_retries:
+                        await Pool.execute(
+                            """UPDATE event_outbox
+                               SET pushed = TRUE, error = $1
+                               WHERE id = $2""",
+                            "dead_letter",
+                            event_id,
+                        )
+                        await _write_dead_letter(event_id, event)
+                        logger.warning("event %s moved to dead letter after %d attempts", event_id, attempts)
+                    else:
+                        await Pool.execute(
+                            """UPDATE event_outbox
+                               SET delivery_attempts = delivery_attempts + 1, error = $1
+                               WHERE id = $2""",
+                            "delivery_failed",
+                            event_id,
+                        )
                     _metrics["errors"] += 1
 
         except Exception as e:
             logger.exception("poll cycle error: %s", e)
             await asyncio.sleep(settings.poll_interval)
 
-    await client.aclose()
+    if client is not shared_client:
+        await client.aclose()
 
 
 async def _deliver_to_augur(client: httpx.AsyncClient, event: dict, event_id) -> bool:

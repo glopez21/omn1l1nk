@@ -10,8 +10,8 @@ from app.config import settings
 
 logger = logging.getLogger("omn1l1nk.agents")
 
-_registry: dict[str, str] = {}        # source_instance → agent_id
-_last_seen: dict[str, datetime] = {}  # source_instance → last event time
+_registry: dict[str, str] = {}
+_last_seen: dict[str, datetime] = {}
 _running = True
 
 
@@ -49,10 +49,9 @@ async def ensure_registered(
             data = resp.json()
             agent_id = data["id"]
             _registry[source_instance] = agent_id
-            logger.info("registered agent %s → %s", source_instance, agent_id)
+            logger.info("registered agent %s -> %s", source_instance, agent_id)
             return agent_id
         if resp.status_code == 400 and "already registered" in resp.text:
-            # Agent exists but we don't know its ID — fetch it
             list_resp = await client.get(
                 f"{settings.augur_url}/api/v1/agents",
                 timeout=10,
@@ -71,6 +70,16 @@ async def ensure_registered(
 
 def mark_seen(source_instance: str):
     _last_seen[source_instance] = datetime.now(timezone.utc)
+
+
+def _cleanup_stale():
+    now = datetime.now(timezone.utc)
+    stale = [inst for inst, last in _last_seen.items() if (now - last).total_seconds() > 600]
+    for inst in stale:
+        _registry.pop(inst, None)
+        _last_seen.pop(inst, None)
+    if stale:
+        logger.debug("cleaned %d stale agent(s) from registry", len(stale))
 
 
 async def heartbeat_loop():
@@ -93,5 +102,6 @@ async def heartbeat_loop():
                         )
                     except httpx.RequestError:
                         pass
+            _cleanup_stale()
     finally:
         await client.aclose()

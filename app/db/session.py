@@ -13,7 +13,14 @@ class Pool:
     @classmethod
     async def connect(cls):
         dsn = _dsn_from_url(settings.db_url)
-        cls._pool = await asyncpg.create_pool(dsn, min_size=2, max_size=10)
+        cls._pool = await asyncpg.create_pool(
+            dsn,
+            min_size=settings.db_pool_min,
+            max_size=settings.db_pool_max,
+            timeout=settings.db_connect_timeout,
+            statement_cache_size=100,
+            command_timeout=settings.db_statement_timeout,
+        )
 
     @classmethod
     async def close(cls):

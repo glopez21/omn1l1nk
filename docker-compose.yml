@@ -1,28 +1,4 @@
 services:
-  n3xusdb:
-    image: timescale/timescaledb:latest-pg16
-    container_name: n3xusdb
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5435:5432"
-    environment:
-      POSTGRES_PASSWORD: ${DB_SUPER_PASSWORD}
-      AUGUR_DB_PASSWORD: ${AUGUR_DB_PASSWORD}
-      TWN_DB_PASSWORD: ${TWN_DB_PASSWORD}
-      EVENTFLOW_DB_PASSWORD: ${EVENTFLOW_DB_PASSWORD}
-      SHARED_DB_PASSWORD: ${SHARED_DB_PASSWORD}
-      OMN1L1NK_DB_PASSWORD: ${OMN1L1NK_DB_PASSWORD}
-    volumes:
-      - n3xus-pgdata:/var/lib/postgresql/data
-      - ../n3xusDB/init:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - n3xus-net
-
   omn1l1nk:
     build: .
     container_name: omn1l1nk
@@ -30,25 +6,32 @@ services:
     ports:
       - "9000:9000"
     environment:
-      OMN1L1NK_DB_URL: "postgresql+asyncpg://omn1l1nk_user:${OMN1L1NK_DB_PASSWORD}@n3xusdb:5432/shared_db"
-      OMN1L1NK_AUGUR_URL: "http://host.docker.internal:8000"
+      OMN1L1NK_DB_URL: "postgresql+asyncpg://omn1l1nk_user:changeme_omn1l1nk@n3xusdb:5432/shared_db"
+      OMN1L1NK_AUGUR_URL: "http://augur-api-1:8000"
       OMN1L1NK_AUGUR_ENABLED: "true"
       OMN1L1NK_THREATPULSE_ENABLED: "false"
       OMN1L1NK_POLL_INTERVAL: "3"
       OMN1L1NK_BATCH_SIZE: "50"
       OMN1L1NK_MAX_RETRIES: "5"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      n3xusdb:
-        condition: service_healthy
+      OMN1L1NK_LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, json; r = urllib.request.urlopen('http://localhost:9000/health'); assert json.loads(r.read())['status'] == 'healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - n3xus-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "512M"
+        reservations:
+          cpus: "0.25"
+          memory: "128M"
 
 networks:
   n3xus-net:
     name: n3xus-net
-    external: false
-
-volumes:
-  n3xus-pgdata:
+    external: true

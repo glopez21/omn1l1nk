@@ -7,12 +7,37 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.db.session import Pool
+from app.ingest.router import invalidate_key_cache
+from app.pipeline.enrich import invalidate_rules_cache
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 
 def _hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _parse_json_field(val):
+    if val is None:
+        return {}
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        return json.loads(val)
+    return {}
+
+
+def _row_to_rule(row) -> dict:
+    return {
+        "id": str(row["id"]),
+        "name": row["name"],
+        "match": _parse_json_field(row["match"]),
+        "enrich": _parse_json_field(row["enrich"]),
+        "priority": row["priority"],
+        "enabled": row["enabled"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
 
 
 # ─── Schemas ─────────────────────────────────────────────────
@@ -109,6 +134,7 @@ async def create_api_key(body: ApiKeyCreate):
         body.source,
         body.source_instance,
     )
+    invalidate_key_cache()
 
     return ApiKeyResponse(
         id=str(row["id"]),
@@ -147,6 +173,8 @@ async def update_api_key(key_id: str, body: ApiKeyUpdate):
     if not row:
         raise HTTPException(404, "api_key not found")
 
+    invalidate_key_cache()
+
     return ApiKeyResponse(
         id=str(row["id"]),
         label=row["label"],
@@ -162,6 +190,7 @@ async def delete_api_key(key_id: str):
     r = await Pool.execute("DELETE FROM daemon_api_keys WHERE id = $1", key_id)
     if r == "DELETE 0":
         raise HTTPException(404, "api_key not found")
+    invalidate_key_cache()
 
 
 # ─── Enrich Rules ────────────────────────────────────────────
@@ -172,19 +201,7 @@ async def list_rules():
     rows = await Pool.fetch(
         "SELECT id, name, match, enrich, priority, enabled, created_at, updated_at FROM enrich_rules ORDER BY priority, name"
     )
-    return [
-        RuleResponse(
-            id=str(r["id"]),
-            name=r["name"],
-            match=json.loads(r["match"]) if isinstance(r["match"], str) else r["match"] if r["match"] else {},
-            enrich=json.loads(r["enrich"]) if isinstance(r["enrich"], str) else r["enrich"] if r["enrich"] else {},
-            priority=r["priority"],
-            enabled=r["enabled"],
-            created_at=r["created_at"],
-            updated_at=r["updated_at"],
-        )
-        for r in rows
-    ]
+    return [RuleResponse(**_row_to_rule(r)) for r in rows]
 
 
 @router.post("/rules", response_model=RuleResponse, status_code=201)
@@ -199,9 +216,8 @@ async def create_rule(body: RuleCreate):
         body.priority,
         body.enabled,
     )
-    row["match"] = json.loads(row["match"]) if isinstance(row["match"], str) else row["match"]
-    row["enrich"] = json.loads(row["enrich"]) if isinstance(row["enrich"], str) else row["enrich"]
-    return _row_to_rule(row)
+    invalidate_rules_cache()
+    return RuleResponse(**_row_to_rule(row))
 
 
 @router.patch("/rules/{rule_id}", response_model=RuleResponse)
@@ -243,9 +259,8 @@ async def update_rule(rule_id: str, body: RuleUpdate):
     if not row:
         raise HTTPException(404, "rule not found")
 
-    row["match"] = json.loads(row["match"]) if isinstance(row["match"], str) else row["match"]
-    row["enrich"] = json.loads(row["enrich"]) if isinstance(row["enrich"], str) else row["enrich"]
-    return _row_to_rule(row)
+    invalidate_rules_cache()
+    return RuleResponse(**_row_to_rule(row))
 
 
 @router.delete("/rules/{rule_id}", status_code=204)
@@ -253,16 +268,23 @@ async def delete_rule(rule_id: str):
     r = await Pool.execute("DELETE FROM enrich_rules WHERE id = $1", rule_id)
     if r == "DELETE 0":
         raise HTTPException(404, "rule not found")
+    invalidate_rules_cache()
 
 
 @router.post("/rules/reorder", status_code=200)
 async def reorder_rules(body: ReorderRequest):
-    for item in body.items:
-        await Pool.execute(
-            "UPDATE enrich_rules SET priority = $1, updated_at = NOW() WHERE id = $2",
-            item.priority,
-            item.id,
-        )
+    if not body.items:
+        raise HTTPException(400, "no items provided")
+
+    async with Pool._pool.acquire() as conn:
+        async with conn.transaction():
+            for item in body.items:
+                await conn.execute(
+                    "UPDATE enrich_rules SET priority = $1, updated_at = NOW() WHERE id = $2",
+                    item.priority,
+                    item.id,
+                )
+    invalidate_rules_cache()
     return {"status": "ok"}
 
 
@@ -338,19 +360,3 @@ async def list_events(limit: int = 50, offset: int = 0, pushed: bool | None = No
             for r in rows
         ],
     }
-
-
-# ─── Helpers ─────────────────────────────────────────────────
-
-
-def _row_to_rule(row) -> RuleResponse:
-    return RuleResponse(
-        id=str(row["id"]),
-        name=row["name"],
-        match=row["match"],
-        enrich=row["enrich"],
-        priority=row["priority"],
-        enabled=row["enabled"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-    )

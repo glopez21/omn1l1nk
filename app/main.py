@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -17,7 +17,7 @@ from app.pipeline.agents import heartbeat_loop, stop as stop_agents
 from app.models.schemas import HealthResponse
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger("omn1l1nk")
@@ -27,28 +27,22 @@ logger = logging.getLogger("omn1l1nk")
 async def lifespan(app: FastAPI):
     logger.info("connecting to n3xusdb...")
     await Pool.connect()
-    logger.info("starting poll loop...")
-    poll_task = asyncio.create_task(poll_loop())
-
-    agent_http = httpx.AsyncClient(timeout=15)
-    app.state.agent_http = agent_http
+    shared_http = httpx.AsyncClient(timeout=30, limits=httpx.Limits(max_keepalive_connections=20, max_connections=50))
+    app.state.shared_http = shared_http
+    app.state.agent_http = shared_http
     agent_task = asyncio.create_task(heartbeat_loop())
+    poll_task = asyncio.create_task(poll_loop(shared_client=shared_http))
 
     yield
     logger.info("shutting down...")
     stop_poller()
     stop_agents()
-    poll_task.cancel()
-    agent_task.cancel()
-    try:
-        await poll_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await agent_task
-    except asyncio.CancelledError:
-        pass
-    await agent_http.aclose()
+    tasks = [poll_task, agent_task]
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await shared_http.aclose()
+    logger.info("shutdown complete")
     await Pool.close()
 
 
@@ -71,27 +65,25 @@ async def admin_redirect():
     return RedirectResponse(url="/admin/")
 
 
+@app.get("/api/v1/health")
 @app.get("/health", response_model=HealthResponse)
-async def health():
+async def health(request: Request):
     pool_ok = Pool._pool is not None and not Pool._pool._closed
     augur_ok = "unknown"
     tp_ok = "unknown"
 
-    import httpx
-
+    client: httpx.AsyncClient = request.app.state.shared_http
     if settings.augur_enabled:
         try:
-            async with httpx.AsyncClient(timeout=5) as c:
-                r = await c.get(f"{settings.augur_url}/api/v1/health")
-                augur_ok = "reachable" if r.is_success else "error"
+            r = await client.get(f"{settings.augur_url}/api/v1/health")
+            augur_ok = "reachable" if r.is_success else "error"
         except Exception:
             augur_ok = "unreachable"
 
     if settings.threatpulse_enabled:
         try:
-            async with httpx.AsyncClient(timeout=5) as c:
-                r = await c.get(f"{settings.threatpulse_url}/health")
-                tp_ok = "reachable" if r.is_success else "error"
+            r = await client.get(f"{settings.threatpulse_url}/health")
+            tp_ok = "reachable" if r.is_success else "error"
         except Exception:
             tp_ok = "unreachable"
 

@@ -1,7 +1,15 @@
+import asyncio
 import json
-from datetime import datetime
+import logging
+import time
 
+from app.config import settings
 from app.db.session import Pool
+
+logger = logging.getLogger("omn1l1nk.enrich")
+
+_rules_cache: list[dict] | None = None
+_rules_cache_ts: float = 0
 
 
 def _load_json(val):
@@ -15,10 +23,15 @@ def _load_json(val):
 
 
 async def load_rules():
+    global _rules_cache, _rules_cache_ts
+    now = time.time()
+    if _rules_cache is not None and (now - _rules_cache_ts) < settings.rules_cache_ttl:
+        return _rules_cache
+
     rows = await Pool.fetch(
         "SELECT name, match, enrich FROM enrich_rules WHERE enabled = TRUE ORDER BY priority"
     )
-    return [
+    _rules_cache = [
         {
             "name": r["name"],
             "match": _load_json(r["match"]),
@@ -26,6 +39,13 @@ async def load_rules():
         }
         for r in rows
     ]
+    _rules_cache_ts = now
+    return _rules_cache
+
+
+def invalidate_rules_cache():
+    global _rules_cache
+    _rules_cache = None
 
 
 def _flatten(d: dict, prefix: str = "") -> dict:
